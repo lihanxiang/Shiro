@@ -4,13 +4,51 @@
 
 这不是 Shiro 的基本用法教程，也不是完整的项目，只是用 SSM 结合 Shiro 进行登录、授权等行为的模块，如果对 Shiro 还不熟悉的同学可以去看一看这个[跟我学Shiro目录贴](http://jinnianshilongnian.iteye.com/blog/2018398)
 
-只准备做两个页面测试用，所以这个项目体现的主要还是后台开发时使用 Shiro 的情况，之前在 [Registration-login-interface2](https://github.com/lihanxiang/Registration-login-interface2) 使用了 Shiro 来做登录，但是那个也太简单了，所以单独拎出来一个项目做 Shiro（登录、授权、加密、Session 和单点登录等多个方面），从头开始构建模块
+只准备做两个页面测试用，所以这个项目体现的主要还是后台开发时使用 Shiro 的情况，之前在 [Registration-login-interface2](https://github.com/lihanxiang/Registration-login-interface2) 使用了 Shiro 来做登录，但是那个也太简单了，所以单独拎出来一个项目做 Shiro 的一些基本功能（登录、授权、加密、Session 和单点登录等多个方面），由于网页只是做测试，那么就先删去验证码部分
 
 ## 请注意
 
 这个项目更多的是提供一个解决方案（从 0 到 1），如果有需要登录界面的项目，可以在这个方案的基础上进行一些修改，再整合到你自己的项目中，就能很轻易地实现管理了
 
-### 1. 数据表
+### 1. 目录结构
+
+总共这么几个文件，就可以搭建一个项目的基本框架了
+
+```
+—— config
+    |   spring
+        |   spring-mvc.xml
+        |   spring.mybatis.xml
+        |   spring.shiro.xml
+    |   db.properties
+—— controller
+    |   UserController
+    |   RoleController
+    |   PermissionController
+—— entity
+    |   User.java
+    |   Role.java
+    |   Permission.java
+—— mapper
+    |   PermissionMapper.java
+    |   PermissionMapper.xml
+    |   RoleMapper.java
+    |   RoleMapper.xml
+    |   UserMapper.java
+    |   UserMapper.xml
+—— service
+    |   impl
+        |   PermissionServiceImpl.java
+        |   RoleServiceImpl.java
+        |   UserServiceImpl.java
+    |   PermissionService.java
+    |   RoleService.java
+    |   UserService.java
+—— shiro
+    |   CustomizeRealm
+```
+
+### 2. 数据表
 
 总共是 5 张表，用户表是我自己定的，如果你的项目里有用户表，就不要再建了。前三张表是实体类，一个用户拥有一至多个角色，每个角色拥有一至多个权限，后面两张 `user_role` 和 `role_permission` 是用来表示两两之间的联系的：
 
@@ -78,11 +116,11 @@ INSERT INTO role_permission VALUES
 
 创建学生和老师账户的工作就交给管理员进行
 
-### 2. SSM 基本配置
+### 3. SSM 基本配置
 
 至于 SSM 的基本配置，还是老样子，就那几个文件，这里有一个 [Gist](https://gist.github.com/lihanxiang/a5c91b514e311268094ce56f508c9880)，直接拿下来用就行了
 
-### 3. Shiro 基本配置
+### 4. Shiro 基本配置
 
 首先修改 web.xml，添加过滤器，这个名为 shiroFilter 的过滤器现在其实还没用，Shiro 作为 Spring 的 Bean，是归 Spring 管的，所以这时候要用一个类：`DelegatingFilterProxy`，这个类并不是一个过滤器，而是一个用于将 filter 作为一个 Bean，由 Spring 管理的代理,
 
@@ -111,8 +149,8 @@ INSERT INTO role_permission VALUES
             <value>
                 <!-- 登录页面不拦截 -->
                 /preLogin.action = anon
-                /userStatus.action = user
-                /admin/** = roles[admin]
+                <!-- 测试授权页面 -->
+                /testAuthorize.action = roles[admin]
                 <!-- 登出操作 -->
                 /student/logout.action = logout
             </value>
@@ -166,7 +204,7 @@ INSERT INTO role_permission VALUES
 
 如果是在 spring-shiro.xml 中用过滤链来进行权限管理就不需要开启 AOP 注解支持
 
-### 4. 基本操作的接口和映射文件
+### 5. 基本操作的接口和映射文件
 
 到了写 CRUD 的时候了，只给出基本的方法，在整合时根据自己的用户表再来做相对应的拓展
 
@@ -260,5 +298,264 @@ public interface UserMapper {
 然后是针对 Role 类的，增删改查以及为角色添加权限的操作：
 
 ```
+public interface RoleMapper {
+
+    void addRole(Role role);
+    void addRolePermission(@Param("roleID") Long roleID,
+                           @Param("permissionID") Long permissionID);
+
+    void updateRole(Role role);
+
+    Role findRoleByID(Long ID);
+    List<Role> findAllRoles();
+    List<Permission> findPermissions(Long ID);
+
+    //删除某个角色（用户无关）
+    void deleteRole(Long ID);
+    //删除某个角色拥有的某个权限
+    void deleteRolePermission(@Param("roleID")Long roleID,
+                              @Param("permissionID")Long permissionID);
+    //删除某个角色拥有的全部权限
+    void deleteAllPermission(Long ID);
+}
+```
+
+对应的 mapper
 
 ```
+<mapper namespace="mapper.RoleMapper">
+    <insert id="addRolePermission" parameterType="Long">
+        INSERT INTO role_permission (roleID, permissionID)
+        SET VALUE (#{roleID}, #{permissionID})
+    </insert>
+
+    <insert id="addRole" parameterType="entity.Role">
+        INSERT INTO role (role, description)
+        VALUE (#{role}, #{description})
+    </insert>
+
+    <update id="updateRole" parameterType="entity.Role">
+        UPDATE role
+        <set>
+            <if test="role != null">
+                role = #{role}
+            </if>
+            <if test="description != null">
+                description = #{description}
+            </if>
+        </set>
+    </update>
+
+    <select id="findRoleByID" parameterType="Long">
+        SELECT *
+        FROM role
+        WHERE id = #{ID}
+    </select>
+    <select id="findAllRoles" resultType="entity.Role">
+        SELECT *
+        FROM role
+    </select>
+    <select id="findPermissions" parameterType="Long" resultType="entity.Permission">
+        SELECT p.id, p.permission, p.description
+        FROM user u, role r, permission p, user_role ur, role_permission rp
+        WHERE u.id = #{ID}
+        AND u.id = ur.userID
+        AND r.id = ur.roleID
+        AND r.id = rp.roleID
+        AND p.id = rp.permissionID
+    </select>
+
+    <delete id="deleteRole" parameterType="Long">
+        DELETE
+        FROM role
+        WHERE id = #{ID}
+    </delete>
+    <delete id="deleteRolePermission" parameterType="Long">
+        DELETE
+        FROM role_permission rp
+        WHERE roleID = #{roleID}
+        AND permissionID = #{permissionID}
+    </delete>
+    <delete id="deleteAllPermission" parameterType="Long">
+        DELETE
+        FROM role_permission rp
+        WHERE roleID = #{ID}
+    </delete>
+</mapper>
+```
+
+最后是针对 Permission 类的，操作会少一些：
+
+```
+public interface PermissionMapper {
+    void addPermission(Permission permission);
+
+    void updatePermission(Permission permission);
+
+    Permission findPermissionByID(Long ID);
+    List<Permission> findAllPermissions();
+
+    void deletePermission(Long ID);
+}
+```
+
+对应 mapper：
+
+```
+<mapper namespace="mapper.PermissionMapper">
+    <insert id="addPermission" parameterType="entity.Permission">
+        INSERT INTO permission (permission, description)
+        VALUE (#{permission}, #{description})
+    </insert>
+
+    <update id="updatePermission" parameterType="entity.Permission">
+        UPDATE permission
+        <set>
+            <if test="premission != null">
+                permission = #{premission}
+            </if>
+            <if test="description != null">
+                description = #{description}
+            </if>
+        </set>
+    </update>
+
+    <select id="findPermissionByID" parameterType="Long">
+        SELECT *
+        FROM premission
+        WHERE ID = #{ID}
+    </select>
+    <select id="findAllPermissions" parameterType="entity.Permission">
+        SELECT *
+        FROM premission
+    </select>
+
+    <delete id="deletePermission" parameterType="Long">
+        DELETE
+        FROM premission
+        WHERE ID = #{ID}
+    </delete>
+</mapper>
+```
+
+### 6. service
+
+service 里有着与映射器接口相同的方法，在 impl 包中对接口的实现也都是调用映射器接口的办法（老生常谈），这里就不说明了
+
+### 7. Realm
+
+这里我们采用自定义的 Realm：
+
+```
+public class CustomizeRealm extends AuthorizingRealm {
+
+    @Autowired
+    private UserService userService;
+
+    @Override
+    protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+        /*
+        //获取用户名
+        String username = (String)principalCollection.getPrimaryPrincipal();
+        SimpleAuthorizationInfo authorizationInfo = new SimpleAuthorizationInfo();
+        Set<String> role = new HashSet<>();
+        //根据 ID 获取用户所拥有的角色
+        List<Role> roles = userService.findRoles(userService.findUserByName(username).getID());
+        for (Role r :
+                roles) {
+            role.add(r.getRole());
+        }
+        authorizationInfo.setRoles(role);
+        return authorizationInfo;*/
+        return null;
+    }
+
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) throws AuthenticationException {
+        String username = (String)authenticationToken.getPrincipal();
+        String password = new String((char[])authenticationToken.getCredentials());
+        //根据用户输入来查找角色
+        User user = userService.findUserByName(username);
+        if (user == null){
+            throw new AuthenticationException("User doesn't exist");
+        }
+        if (!username.equals(user.getUsername())){
+            throw new AuthenticationException("Wrong username");
+        }
+        if (!password.equals(user.getPassword())){
+            throw new AuthenticationException("Wrong password");
+        }
+        return new SimpleAuthenticationInfo(username, password, getName());
+    }
+}
+```
+
+对于登录：这里将传入的 token 中获取用户名，使用 service 层的方法去数据库中查找对应记录，然后将记录中的密码字段与传入 token 的密码做对比，得出结果
+
+对于授权：这里被注释掉的原因是，我采用的验证授权的方式是在 spring-shiro.xml 中配置过滤链来检测
+
+对于另外这三种情况：
+
+1. 在调用 `subject.hasRole()` 或 `subject.isPermitted()` 时
+
+2. Controller 中方法注解 `@RequiresRoles()` 时
+
+3. 在 jsp 中添加 shiro 标签 `<shiro:hasPermission name = "xxx"></shiro:hasPermission>` 时
+
+则会进入 `doGetAuthorizationInfo(PrincipalCollection principalCollection)`，获取用户名，然后在数据库中查找其拥有的角色，采用 Set 的形式，添加至 `authorizationInfo`
+
+### 8. controller
+
+做登录的操作：
+
+```
+@RequestMapping("/login")
+    public ModelAndView login(User user){
+        ModelAndView modelAndView = new ModelAndView("main");
+        //得到 Subject
+        Subject subject = SecurityUtils.getSubject();
+        //获取 token，用于验证
+        UsernamePasswordToken usernamePasswordToken = new UsernamePasswordToken(user.getUsername(), user.getPassword());
+        try {
+            //尝试登录
+            subject.login(usernamePasswordToken);
+            modelAndView.addObject("username", user.getUsername());
+        } catch (AuthenticationException e){
+            modelAndView = new ModelAndView("login");
+            modelAndView.addObject("message", e.getMessage());
+        }
+        return modelAndView;
+    }
+```
+
+登录的流程：
+
+1. `Subject subject = SecurityUtils.getSubject();` 通过 SecurityUtils 得到 Subject 实例
+
+2. `UsernamePasswordToken usernamePasswordToken = new UsernamePasswordToken(user.getUsername(), user.getPassword());` ，获取用于身份验证的 Token，如用户名/密码
+
+3. `subject.login(usernamePasswordToken);` 委托给 `SecurityManager` 进行登录，`SecurityManager` 又 委托给 `Authenticator` 进行验证（老母猪戴胸罩，你是一套又一套），`Authenticator` 将 2 中获取的 Token 传入 Realm，如果返回 null 或者抛出异常就代表登录失败
+
+接下来在 Controller 中写两个方法：
+
+```
+    //如果没有角色 admin，无法访问这个页面
+    @RequestMapping("testAuthorize")
+    public String testAuthorize(){
+        return "testAuthorize";
+    }
+
+    // URL 中 .jsp 会被拦截，所以这里用 unAuthorize.action 来作为过滤链中的跳转动作
+    @RequestMapping("unAuthorize")
+    public String unAuthorize(){
+        return "unAuthorize";
+    }
+```
+
+接下来运行一下做个测试：
+
+如果在未登录的情况访问 `http://localhost:8080/testAuthorize.action`，则会要求你先登录，那我们又 student/student 作为学生登录一下，然后访问 `http://localhost:8080/testAuthorize.action`，就会跳转到 `http://localhost:8080/unAuthorize.action`：
+
+![](https://upload-images.jianshu.io/upload_images/3426615-3eaddf7e60598c10.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+这样子，登录与授权的基本模型就做完了，接下来是密码加密等操作，即将上传
