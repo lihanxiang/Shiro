@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="mapper.UserMapper">
+    <insert id="addUser" parameterType="entity.User">
+      INSERT INTO user(username, password)
+      VALUE (#{username}, #{password});
+    </insert>
+    <insert id="addUserRole" parameterType="Long">
+        INSERT INTO user_role (userID, roleID)
+        VALUES (#{userID}, #{roleID})
+    </insert>
+
+    <update id="updateUser" parameterType="entity.User">
+        UPDATE user
+        SET username = #{username},role = #{role}
+        WHERE id = #{ID}
+    </update>
+
+    <select id="findUserByName" parameterType="String" resultType="entity.User">
+        SELECT *
+        FROM user
+        WHERE username = #{username}
+    </select>
+    <select id="findUserByID" parameterType="Long" resultType="entity.User">
+        SELECT *
+        FROM user
+        WHERE id = #{ID}
+    </select>
+    <select id="findAllUser" resultType="entity.User">
+        SELECT *
+        FROM user
+    </select>
+    <select id="findRoles" parameterType="Long" resultType="entity.Role">
+        SELECT r.ID, r.role, r.description
+        FROM user u, role r, user_role ur
+        WHERE u.id = #{ID}
+        AND u.id = ur.userID
+        AND r.id = ur.roleID
+    </select>
+
+    <delete id="deleteUser" parameterType="Long">
+        DELETE
+        FROM user
+        WHERE id = #{ID}
+    </delete>
+    <delete id="deleteUserRole" parameterType="Long">
+        DELETE
+        FROM user_role
+        WHERE userID = #{userID}
+        AND roleID = #{roleID}
+    </delete>
+    <delete id="deleteAllRoles" parameterType="Long">
+        DELETE
+        FROM user_role
+        WHERE userID = #{ID}
+    </delete>
+</mapper>
