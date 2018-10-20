@@ -26,29 +26,27 @@ public class CustomizeRealm extends AuthorizingRealm {
 
     @Override
     protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+        /*
+        //获取用户名
         String username = (String)principalCollection.getPrimaryPrincipal();
         SimpleAuthorizationInfo authorizationInfo = new SimpleAuthorizationInfo();
         Set<String> role = new HashSet<>();
-        List<Role> roles = userService.findRoles(username);
+        //根据 ID 获取用户所拥有的角色
+        List<Role> roles = userService.findRoles(userService.findUserByName(username).getID());
         for (Role r :
                 roles) {
             role.add(r.getRole());
         }
         authorizationInfo.setRoles(role);
-        Set<String> permission = new HashSet<>();
-        List<Permission> permissions = userService.findPermissions(username);
-        for (Permission p :
-                permissions) {
-            permission.add(p.getPermission());
-        }
-        authorizationInfo.setStringPermissions(permission);
-        return authorizationInfo;
+        return authorizationInfo;*/
+        return null;
     }
 
     @Override
     protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) throws AuthenticationException {
         String username = (String)authenticationToken.getPrincipal();
         String password = new String((char[])authenticationToken.getCredentials());
+        //根据用户输入来查找角色
         User user = userService.findUserByName(username);
         if (user == null){
             throw new AuthenticationException("User doesn't exist");
