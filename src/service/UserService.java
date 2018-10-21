@@ -8,6 +8,7 @@ import java.util.List;
 
 public interface UserService {
 
+    void addUser(User user);
     void addUserRole(Long userID, Long roleID);
     void updateUser(User user);
 
