@@ -9,11 +9,14 @@ import org.apache.shiro.authc.AuthenticationToken;
 import org.apache.shiro.authc.SimpleAuthenticationInfo;
 import org.apache.shiro.authz.AuthorizationInfo;
 import org.apache.shiro.authz.SimpleAuthorizationInfo;
+import org.apache.shiro.authz.UnauthenticatedException;
 import org.apache.shiro.authz.UnauthorizedException;
 import org.apache.shiro.realm.AuthorizingRealm;
 import org.apache.shiro.subject.PrincipalCollection;
+import org.apache.shiro.util.ByteSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import service.UserService;
+import util.Encryption;
 
 import java.util.HashSet;
 import java.util.List;
@@ -45,7 +48,6 @@ public class CustomizeRealm extends AuthorizingRealm {
     @Override
     protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) throws AuthenticationException {
         String username = (String)authenticationToken.getPrincipal();
-        String password = new String((char[])authenticationToken.getCredentials());
         //根据用户输入来查找角色
         User user = userService.findUserByName(username);
         if (user == null){
@@ -54,9 +56,11 @@ public class CustomizeRealm extends AuthorizingRealm {
         if (!username.equals(user.getUsername())){
             throw new AuthenticationException("Wrong username");
         }
-        if (!password.equals(user.getPassword())){
-            throw new AuthenticationException("Wrong password");
-        }
-        return new SimpleAuthenticationInfo(username, password, getName());
+        return new SimpleAuthenticationInfo(
+                user.getUsername(),
+                user.getPassword(),
+                ByteSource.Util.bytes(user.getSalt()),
+                getName()
+        );
     }
 }
