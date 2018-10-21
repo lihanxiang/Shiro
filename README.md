@@ -10,6 +10,8 @@
 
 这个项目更多的是提供一个解决方案（从 0 到 1），如果有需要登录界面的项目，可以在这个方案的基础上进行一些修改，再整合到你自己的项目中，就能很轻易地实现管理了
 
+## 登录和授权
+
 ### 1. 目录结构
 
 总共这么几个文件，就可以搭建一个项目的基本框架了
@@ -22,9 +24,9 @@
         |   spring.shiro.xml
     |   db.properties
 —— controller
-    |   UserController
-    |   RoleController
-    |   PermissionController
+    |   UserController.java
+    |   RoleController.java
+    |   PermissionController.java
 —— entity
     |   User.java
     |   Role.java
@@ -45,7 +47,9 @@
     |   RoleService.java
     |   UserService.java
 —— shiro
-    |   CustomizeRealm
+    |   CustomizeRealm.java
+—— util
+    |   Encryption.java
 ```
 
 ### 2. 数据表
@@ -297,8 +301,6 @@ public interface UserMapper {
 
 然后是针对 Role 类的，增删改查以及为角色添加权限的操作：
 
-即将上传
-
 ```
 public interface RoleMapper {
 
@@ -536,7 +538,7 @@ public class CustomizeRealm extends AuthorizingRealm {
 
 2. `UsernamePasswordToken usernamePasswordToken = new UsernamePasswordToken(user.getUsername(), user.getPassword());` ，获取用于身份验证的 Token，如用户名/密码
 
-3. `subject.login(usernamePasswordToken);` 委托给 `SecurityManager` 进行登录，`SecurityManager` 又 委托给 `Authenticator` 进行验证（老母猪戴胸罩，你是一套又一套），`Authenticator` 将 2 中获取的 Token 传入 Realm，如果返回 null 或者抛出异常就代表登录失败
+3. `subject.login(usernamePasswordToken);` 委托给 `SecurityManager` 进行登录，`SecurityManager` 又 委托给 `Authenticator` 进行验证（老母猪戴胸罩，你是一套又一套），`Authenticator` 将 2 中获取的 Token 与 Realm 返回的结果作比较，如果返回 null 或者抛出异常就代表登录失败
 
 接下来在 Controller 中写两个方法：
 
@@ -560,4 +562,163 @@ public class CustomizeRealm extends AuthorizingRealm {
 
 ![](https://upload-images.jianshu.io/upload_images/3426615-3eaddf7e60598c10.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-这样子，登录与授权的基本模型就做完了，接下来是密码加密等操作，即将上传
+## 2. 加密
+
+对于密码的加密，我们采用的是 MD5 消息摘要算法（MD5 Message-Digest Algorithm），是一种广泛使用的散列（Hash）算法，只不过，现在有一些网站可以提供散列算法加密的破解，所以我们要对加密前的密码做一点修改，那就是加盐（salt），也就是对密码加上一些只有系统内部才知道数据（盐或者用户名等数据），然后再进行加密，就很难被逆向破解
+
+既然加密后很难被破解，那么我们也就不进行解密工作，而是将用户登入时输入的密码，结合数据库中的用户的盐值记录结合，按照相同的方式进行加密，如果用户的输入是正确的，那么结合盐值之后再进行加密就会得到相同的结果
+
+### 1. 创建 Encryption 类用于用户加密
+
+首先，我们要先创建一个进行加密的类：
+
+```
+@Component
+public class Encryption {
+
+    //生成随机盐值
+    private SecureRandomNumberGenerator randomNumberGenerator = new SecureRandomNumberGenerator();
+
+    //加密算法名称
+    private String algorithmName = "MD5";
+
+    //加密次数
+    private int iterationTimes = 5;
+
+    public SecureRandomNumberGenerator getRandomNumberGenerator() {
+        return randomNumberGenerator;
+    }
+
+    public void setRandomNumberGenerator(SecureRandomNumberGenerator randomNumberGenerator) {
+        this.randomNumberGenerator = randomNumberGenerator;
+    }
+
+    public String getAlgorithmName() {
+        return algorithmName;
+    }
+
+    public void setAlgorithmName(String algorithmName) {
+        this.algorithmName = algorithmName;
+    }
+
+    public int getIterationTimes() {
+        return iterationTimes;
+    }
+
+    public void setIterationTimes(int iterationTimes) {
+        this.iterationTimes = iterationTimes;
+    }
+
+    public void encryptPassword(User user){
+        if (user.getPassword() != null){
+            //设置盐值
+            user.setSalt(randomNumberGenerator.nextBytes().toHex());
+            //加密
+            String password = new SimpleHash(algorithmName, user.getPassword(),
+                    ByteSource.Util.bytes(user.getSalt()), iterationTimes).toHex();
+            user.setPassword(password);
+        }
+    }
+}
+```
+
+算法名称以及加密次数在接下来的配置中都要用到
+
+### 2. 在创建用户和更新用户信息时都需要进行加密：
+
+在 UserServiceImpl 中添加加密方法：
+
+```
+    @Autowired
+    private Encryption encryption;
+    
+    @Override
+    public void addUser(User user) {
+        encryption.encryptPassword(user);
+        userMapper.addUser(user);
+    }
+    
+    @Override
+    public void updateUser(User user) {
+        encryption.encryptPassword(user);
+        userMapper.updateUser(user);
+    }
+```
+
+这时候，运行一下，以 `12345/12345` 的用户名/密码来添加一个用户，在数据库中查询用户表，就会发现密码已经被加密了：
+
+![](https://upload-images.jianshu.io/upload_images/3426615-1cdac8780040cf71.PNG?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 3. 对登录时的输入进行加密
+
+接下来我们对自定义的 Realm 做一点修改，使用另一种形式的 `SimpleAuthenticationInfo`：
+
+第二个参数 `hashedCredentials` 是加密过的密码，以 `user.getPassword()` 的方式取得
+
+```
+    public SimpleAuthenticationInfo(Object principal, Object hashedCredentials, 
+                                ByteSource credentialsSalt, String realmName) {
+        this.principals = new SimplePrincipalCollection(principal, realmName);
+        this.credentials = hashedCredentials;
+        this.credentialsSalt = credentialsSalt;
+    }
+```
+
+```
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken)
+                                                        throws AuthenticationException {
+        String username = (String)authenticationToken.getPrincipal();
+        //根据用户输入来查找角色
+        String password = new String((char[])authenticationToken.getCredentials());
+        User user = userService.findUserByName(username);
+        if (user == null){
+            throw new AuthenticationException("User doesn't exist");
+        }
+        if (!username.equals(user.getUsername())){
+            throw new AuthenticationException("Wrong username");
+        }
+        return new SimpleAuthenticationInfo(
+                user.getUsername(),
+                user.getPassword(),
+                ByteSource.Util.bytes(user.getSalt()),
+                getName()
+        );
+    }
+```
+
+然后需要在 spring-shiro.xml 中的 Realm Bean 添加一个属性：
+
+```
+    <bean id="customizeRealm" class="shiro.CustomizeRealm">
+        <property name="credentialsMatcher">
+            <bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+                <!-- 算法名称 -->
+                <property name="hashAlgorithmName" value="MD5"/>
+                <!-- 加密次数 -->
+                <property name="hashIterations" value="5"/>
+                <property name="storedCredentialsHexEncoded" value="true"/>
+            </bean>
+        </property>
+    </bean>
+```
+
+这个配置表示直接采用默认的 `HashedCredentialsMatcher` 中的 `doCredentialsMatch()` 方法，比较二者并返回结果：
+
+```
+    public boolean doCredentialsMatch(AuthenticationToken token, AuthenticationInfo info) {
+        Object tokenHashedCredentials = this.hashProvidedCredentials(token, info);
+        Object accountCredentials = this.getCredentials(info);
+        return this.equals(tokenHashedCredentials, accountCredentials);
+    }
+```
+
+### 4. 登录过程
+
+这里讲一下是怎样在加密的情况下登录的：
+
+1. 收集页面上的输入信息（username/password）作为 token
+
+2. CustomizeRealm 返回的 `SimpleAuthenticationInfo` 是包含了加密后的密码以及用户的盐值，用于信息的验证
+
+3. 知道了加密算法的名称，加密的次数，就能把 1 的 token 中的密码进行加密，然后和 2 的 `SimpleAuthenticationInfo` 作比较，得出结果
