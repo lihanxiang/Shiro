@@ -9,12 +9,7 @@
 <html>
 <head>
     <title>Title</title>
-    <link rel="stylesheet" type="text/css" href="../../../css/login.css">
-    <script type="text/javascript">
-        function RefreshCode(obj){
-            obj.src = obj.src + "?code=" + Math.random();
-        }
-    </script>
+    <link rel="stylesheet" type="text/css" href="../../css/login.css">
 </head>
 <body>
 <form action="${pageContext.request.contextPath}/login.action" method="post">
@@ -27,11 +22,6 @@
         </p>
         <p>
             <input type="password" name="password" placeholder="密  码" value="${user.password}"/><br>
-        </p>
-        <p>
-            <!--<input type="text" name="verifyCode" placeholder="验证码" size="10"/><br>
-        <img id="verifyCode" src="getVerifyCode.action" title="点击更换" onclick="RefreshCode(this)"/><br>
-        -->
         </p>
         <input class="button" type="submit" value="登录">
         <input class="button" type="reset" value="重置">
