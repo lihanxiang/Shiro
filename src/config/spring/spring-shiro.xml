@@ -26,5 +26,13 @@
         <property name="realm" ref="customizeRealm"/>
     </bean>
 
-    <bean id="customizeRealm" class="shiro.CustomizeRealm"/>
+    <bean id="customizeRealm" class="shiro.CustomizeRealm">
+        <property name="credentialsMatcher">
+            <bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+                <property name="hashAlgorithmName" value="MD5"/>
+                <property name="hashIterations" value="5"/>
+                <property name="storedCredentialsHexEncoded" value="true"/>
+            </bean>
+        </property>
+    </bean>
 </beans>
