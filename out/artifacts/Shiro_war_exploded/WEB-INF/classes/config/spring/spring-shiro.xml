@@ -9,15 +9,11 @@
         <property name="loginUrl" value="preLogin.action"/>
         <!-- 如果在未登录的情况下访问受限页面，就跳转至此 -->
         <property name="unauthorizedUrl" value="unAuthorize.action"/>
-        <!-- 过滤链 -->
         <property name="filterChainDefinitions">
             <value>
-                <!-- 登录页面不拦截 -->
                 /preLogin.action = anon
-                <!-- 测试授权页面 -->
                 /testAuthorize.action = roles[admin]
-                <!-- 登出操作 -->
-                /student/logout.action = logout
+                /logout.action = logout
             </value>
         </property>
     </bean>
@@ -34,5 +30,16 @@
                 <property name="storedCredentialsHexEncoded" value="true"/>
             </bean>
         </property>
+    </bean>
+
+    <bean id="sessionManager" class="org.apache.shiro.web.session.mgt.DefaultWebSessionManager">
+        <property name="sessionIdCookieEnabled" value="true"/>
+        <property name="sessionIdCookie" ref="sessionIdCookie"/>
+        <property name="globalSessionTimeout" value="600000"/>
+    </bean>
+
+    <bean id="sessionIdCookie" class="org.apache.shiro.web.servlet.SimpleCookie">
+        <property name="httpOnly" value="true"/>
+        <property name="maxAge" value="-1"/>
     </bean>
 </beans>

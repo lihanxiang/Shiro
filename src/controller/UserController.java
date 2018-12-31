@@ -4,6 +4,7 @@ import entity.User;
 import org.apache.shiro.SecurityUtils;
 import org.apache.shiro.authc.AuthenticationException;
 import org.apache.shiro.authc.UsernamePasswordToken;
+import org.apache.shiro.session.Session;
 import org.apache.shiro.subject.Subject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -35,15 +36,23 @@ public class UserController {
         Subject subject = SecurityUtils.getSubject();
         //获取 token，用于验证
         UsernamePasswordToken usernamePasswordToken = new UsernamePasswordToken(user.getUsername(), user.getPassword());
+        System.out.println(user.getPassword());
         try {
             //尝试登录
             subject.login(usernamePasswordToken);
-
         } catch (AuthenticationException e){
             modelAndView = new ModelAndView("login");
             modelAndView.addObject("message", e.getMessage());
         }
         return modelAndView;
+    }
+
+    @RequestMapping("testSession")
+    public ModelAndView testSession(){
+        String username = (String)SecurityUtils.getSubject().getPrincipal();
+        Session session = SecurityUtils.getSubject().getSession();
+        session.setAttribute("username", username);
+        return new ModelAndView("test").addObject("username", session.getAttribute("username"));
     }
 
     @RequestMapping("testAuthorize")
